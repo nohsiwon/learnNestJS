@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { Post } from './post/entities/post.entity';
 import { PostModule } from './post/post.module';
+import { UserModule } from './user/user.module';
 
 const typeOrmModuleOptions = {
   useFactory: async (
@@ -41,6 +42,7 @@ const typeOrmModuleOptions = {
     }),
     TypeOrmModule.forRootAsync(typeOrmModuleOptions),
     PostModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

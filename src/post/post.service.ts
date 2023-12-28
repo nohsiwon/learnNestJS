@@ -1,7 +1,11 @@
 import _ from 'lodash';
 import { Repository } from 'typeorm';
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { CreatePostDto } from './dto/create-post.dto';
@@ -11,64 +15,62 @@ import { Post } from './entities/post.entity';
 
 @Injectable()
 export class PostService {
-  private articles: { id: number; title: string; content: string }[] = [];
-  private articlePasswords = new Map<number, number>();
-
   constructor(
     @InjectRepository(Post) private postRepository: Repository<Post>,
   ) {}
 
-  create(createPostDto: CreatePostDto) {
-    const { title, content, password } = createPostDto;
-    const id = this.articles.length + 1;
-
-    this.articles.push({ id, title, content });
-    this.articlePasswords.set(id, password);
-
-    return { id };
+  async create(createPostDto: CreatePostDto) {
+    return (await this.postRepository.save(createPostDto)).id;
   }
 
-  findAll() {
-    return this.articles.map(({ id, title }) => ({ id, title }));
+  async findAll() {
+    return await this.postRepository.find({
+      where: { deletedAt: null },
+      select: ['id', 'title', 'updatedAt'],
+    });
   }
 
-  findOne(id: number) {
-    return this.articles.find((article) => article.id === id);
+  async findOne(id: number) {
+    return await this.postRepository.findOne({
+      where: { id, deletedAt: null },
+      select: ['title', 'content', 'updatedAt'],
+    });
   }
 
-  update(id: number, updatePostDto: UpdatePostDto) {
+  async update(id: number, updatePostDto: UpdatePostDto) {
     const { content, password } = updatePostDto;
-    const article = this.articles.find((article) => article.id === id);
+    const post = await this.postRepository.findOne({
+      select: ['password'],
+      where: { id },
+    });
 
-    if (_.isNil(article)) {
+    if (_.isNil(post)) {
       throw new NotFoundException('게시물을 찾을 수 없습니다.');
     }
 
-    const articlePassword = this.articlePasswords.get(id);
-    if (!_.isNil(articlePassword) && articlePassword !== password) {
-      throw new NotFoundException('비밀번호가 일치하지 않습니다.');
+    if (!_.isNil(post.password) && post.password !== password) {
+      throw new UnauthorizedException('비밀번호가 일치하지 않습니다.');
     }
 
-    article.content = content;
+    await this.postRepository.update({ id }, { content });
   }
 
-  remove(id: number, deletePostDto: RemovePostDTO) {
-    const articleIndex = this.articles.findIndex(
-      (article) => article.id === id,
-    );
+  async remove(id: number, removePostDto: RemovePostDTO) {
+    const { password } = removePostDto;
 
-    if (articleIndex === -1) {
+    const post = await this.postRepository.findOne({
+      select: ['password'],
+      where: { id },
+    });
+
+    if (_.isNil(post)) {
       throw new NotFoundException('게시물을 찾을 수 없습니다.');
     }
 
-    const articlePassword = this.articlePasswords.get(id);
-    if (
-      !_.isNil(articlePassword) &&
-      articlePassword !== deletePostDto.password
-    ) {
-      throw new NotFoundException('비밀번호가 일치하지 않습니다.');
+    if (!_.isNil(post.password) && post.password !== password) {
+      throw new UnauthorizedException('비밀번호가 일치하지 않습니다.');
     }
 
-    this.articles.splice(articleIndex, 1);
+    return this.postRepository.softDelete({ id });
   }
 }
