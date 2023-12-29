@@ -1,7 +1,11 @@
+import { Cache } from 'cache-manager';
 import _ from 'lodash';
 import { Repository } from 'typeorm';
 
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
+  BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -17,6 +21,7 @@ import { Post } from './entities/post.entity';
 export class PostService {
   constructor(
     @InjectRepository(Post) private postRepository: Repository<Post>,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async create(createPostDto: CreatePostDto) {
@@ -24,13 +29,24 @@ export class PostService {
   }
 
   async findAll() {
-    return await this.postRepository.find({
+    const cachedArticles = await this.cacheManager.get('articles');
+    if (!_.isNil(cachedArticles)) {
+      return cachedArticles;
+    }
+
+    const articles = await this.postRepository.find({
       where: { deletedAt: null },
       select: ['id', 'title', 'updatedAt'],
     });
+    await this.cacheManager.set('articles', articles);
+    return articles;
   }
 
   async findOne(id: number) {
+    if (_.isNaN(id)) {
+      throw new BadRequestException('게시물 ID가 잘못되었습니다.');
+    }
+
     return await this.postRepository.findOne({
       where: { id, deletedAt: null },
       select: ['title', 'content', 'updatedAt'],
@@ -38,6 +54,10 @@ export class PostService {
   }
 
   async update(id: number, updatePostDto: UpdatePostDto) {
+    if (_.isNaN(id)) {
+      throw new BadRequestException('게시물 ID가 잘못되었습니다.');
+    }
+
     const { content, password } = updatePostDto;
     const post = await this.postRepository.findOne({
       select: ['password'],
@@ -56,6 +76,10 @@ export class PostService {
   }
 
   async remove(id: number, removePostDto: RemovePostDTO) {
+    if (_.isNaN(id)) {
+      throw new BadRequestException('게시물 ID가 잘못되었습니다.');
+    }
+
     const { password } = removePostDto;
 
     const post = await this.postRepository.findOne({
@@ -71,6 +95,6 @@ export class PostService {
       throw new UnauthorizedException('비밀번호가 일치하지 않습니다.');
     }
 
-    return this.postRepository.softDelete({ id });
+    await this.postRepository.softDelete({ id });
   }
 }

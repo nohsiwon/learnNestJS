@@ -1,5 +1,6 @@
 import Joi from 'joi';
 
+import { CacheModule } from '@nestjs/cache-manager';
 import {
   MiddlewareConsumer,
   Module,
@@ -34,7 +35,6 @@ const typeOrmModuleOptions = {
   }),
   inject: [ConfigService],
 };
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -54,6 +54,11 @@ const typeOrmModuleOptions = {
         secret: config.get<string>('JWT_SECRET_KEY'), // .env 파일에 JWT_SECRET_KEY라는 키로 비밀키를 저장해두고 사용합니다.
       }),
       inject: [ConfigService],
+    }),
+    CacheModule.register({
+      ttl: 60000, // 데이터 캐싱 시간(밀리 초 단위, 1000 = 1초)
+      max: 100, // 최대 캐싱 개수
+      isGlobal: true,
     }),
     PostModule,
     UserModule,
